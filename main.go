@@ -749,11 +749,11 @@ func main() {
 		serverPort = v
 	}
 
-	http.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/signin", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "login.html")
 	})
 
-	http.HandleFunc("/login_admin", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/admin-login", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "login_admin.html")
 	})
 
@@ -857,7 +857,7 @@ func main() {
 		http.ServeFile(w, r, "index.html")
 	}))
 
-	http.HandleFunc("/admin", adminAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/dashboard", adminAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "admin.html")
 	}))
 
@@ -1258,7 +1258,7 @@ func main() {
 
 	fmt.Println("图片预览服务器已启动")
 	fmt.Printf("访问地址: http://localhost:%s\n", serverPort)
-	fmt.Printf("管理页面: http://localhost:%s/admin\n", serverPort)
+	fmt.Printf("管理页面: http://localhost:%s/dashboard\n", serverPort)
 	fmt.Printf("数据目录: %s\n", dataDir)
 
 	if config.Schedule.Enabled {

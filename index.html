@@ -377,8 +377,8 @@
             try {
                 var response = await fetch('/api/logout', { method: 'POST' });
                 var data = await response.json();
-                if (data.success) window.location.href = '/login';
-            } catch (e) { window.location.href = '/login'; }
+                if (data.success) window.location.href = '/signin';
+                } catch (e) { window.location.href = '/signin'; }
         }
 
         window.onload = function() { loadSources(); };

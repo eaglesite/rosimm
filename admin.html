@@ -94,7 +94,7 @@
             <h1>&#x1F578; 爬虫管理</h1>
             <div class="nav-links">
                 <a href="/">图片预览</a>
-                <a href="/admin" class="active">管理面板</a>
+                <a href="/dashboard" class="active">管理面板</a>
                 <button class="logout-btn" onclick="logout()">&#x1F6AA; 退出</button>
             </div>
         </div>
@@ -461,8 +461,8 @@
             try {
                 var response = await fetch('/api/logout', { method: 'POST' });
                 var data = await response.json();
-                if (data.success) window.location.href = '/login_admin';
-            } catch (e) { window.location.href = '/login'; }
+                if (data.success) window.location.href = '/admin-login';
+            } catch (e) { window.location.href = '/admin-login'; }
         }
 
         async function changePassword() {
