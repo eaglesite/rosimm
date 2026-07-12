@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,7 +22,6 @@ import (
 
 	"github.com/gocolly/colly"
 	"github.com/gocolly/colly/extensions"
-	"github.com/google/uuid"
 )
 
 type spiderStatsData struct {
@@ -44,23 +46,15 @@ var (
 	adminPassword = config.AdminPassword
 	frontendPassword = config.FrontendPassword
 	serverPort    = config.ServerPort
-	sessions      = make(map[string]sessionData)
-	sessionsMutex sync.Mutex
-
 	scheduledConfigMutex sync.Mutex
 	lastScheduledRun     time.Time
 
 	imageCache     = make(map[string][]string)
 	imageCacheMu   sync.RWMutex
 
-	dataDir string
+	dataDir            string
+	sessionSecretKey   = []byte("rosi-session-secret-change-in-production")
 )
-
-type sessionData struct {
-	username string
-	role     string
-	expireAt time.Time
-}
 
 type RequestConfig struct {
 	Timeout    int               `json:"timeout"`
@@ -317,70 +311,46 @@ func addToImageCache(source, imgName string) {
 	imageCache[source][idx] = imgName
 }
 
-func generateSessionID() string {
-	return uuid.New().String()
-}
-
 func createSession(username, role string) string {
-	sessionID := generateSessionID()
-	sessionsMutex.Lock()
-	sessions[sessionID] = sessionData{
-		username: username,
-		role:     role,
-		expireAt: time.Now().Add(24 * time.Hour),
-	}
-	sessionsMutex.Unlock()
-	return sessionID
+	expireAt := time.Now().Add(24 * time.Hour)
+	data := fmt.Sprintf("%s|%s|%d", username, role, expireAt.Unix())
+	mac := hmac.New(sha256.New, sessionSecretKey)
+	mac.Write([]byte(data))
+	sig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	return base64.RawURLEncoding.EncodeToString([]byte(data)) + "." + sig
 }
 
-func validateSession(sessionID string) bool {
-	sessionsMutex.Lock()
-	defer sessionsMutex.Unlock()
-
-	data, exists := sessions[sessionID]
-	if !exists {
+func validateSession(token string) bool {
+	parts := strings.Split(token, ".")
+	if len(parts) != 2 {
 		return false
 	}
-
-	if time.Now().After(data.expireAt) {
-		delete(sessions, sessionID)
+	data, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
 		return false
 	}
-
+	mac := hmac.New(sha256.New, sessionSecretKey)
+	mac.Write(data)
+	expected := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	if !hmac.Equal([]byte(parts[1]), []byte(expected)) {
+		return false
+	}
+	fields := strings.SplitN(string(data), "|", 3)
+	if len(fields) != 3 {
+		return false
+	}
+	expireAt, err := strconv.ParseInt(fields[2], 10, 64)
+	if err != nil || time.Now().Unix() > expireAt {
+		return false
+	}
 	return true
-}
-
-func cleanExpiredSessions() {
-	sessionsMutex.Lock()
-	defer sessionsMutex.Unlock()
-	now := time.Now()
-	for id, data := range sessions {
-		if now.After(data.expireAt) {
-			delete(sessions, id)
-		}
-	}
-}
-
-func startSessionCleaner() {
-	go func() {
-		for {
-			time.Sleep(1 * time.Hour)
-			cleanExpiredSessions()
-		}
-	}()
-}
-
-func deleteSession(sessionID string) {
-	sessionsMutex.Lock()
-	delete(sessions, sessionID)
-	sessionsMutex.Unlock()
 }
 
 func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sessionID, err := r.Cookie("session_id")
 		if err != nil || !validateSession(sessionID.Value) {
-			http.Redirect(w, r, "/login", http.StatusFound)
+			http.Redirect(w, r, "/signin", http.StatusFound)
 			return
 		}
 		next(w, r)
@@ -391,7 +361,7 @@ func adminAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sessionID, err := r.Cookie("admin_session_id")
 		if err != nil || !validateSession(sessionID.Value) {
-			http.Redirect(w, r, "/login_admin", http.StatusFound)
+			http.Redirect(w, r, "/admin-login", http.StatusFound)
 			return
 		}
 		next(w, r)
@@ -820,14 +790,6 @@ func main() {
 	})
 
 	http.HandleFunc("/api/logout", func(w http.ResponseWriter, r *http.Request) {
-		sessionID, err := r.Cookie("session_id")
-		if err == nil {
-			deleteSession(sessionID.Value)
-		}
-		adminSessionID, err := r.Cookie("admin_session_id")
-		if err == nil {
-			deleteSession(adminSessionID.Value)
-		}
 		http.SetCookie(w, &http.Cookie{
 			Name:     "session_id",
 			Value:    "",
@@ -1270,7 +1232,6 @@ func main() {
 
 	buildImageCache()
 	startScheduler()
-	startSessionCleaner()
 
 	srv := &http.Server{Addr: ":" + serverPort}
 
