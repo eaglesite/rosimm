@@ -1,7 +1,7 @@
 {
     "admin_password": "admin",
     "frontend_password": "123456",
-    "server_port": "8080",
+    "server_port": "80",
     "schedule": {
         "enabled": true,
         "time": "15:20",

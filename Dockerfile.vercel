@@ -1,29 +1,25 @@
-# 构建阶段
+# ============================================================
+# Dockerfile — Vercel Container Registry 部署
+# ============================================================
 FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
-
-# 国内/海外均可
-ENV GOPROXY=https://proxy.golang.org,direct
-
 COPY go.mod go.sum ./
-
 RUN go mod download
-
 COPY . .
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /server .
 
-# 编译
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -o server main.go
+# ============================================================
+FROM alpine:3.20
 
+RUN apk add --no-cache ca-certificates tzdata
 
-# 运行阶段
-FROM alpine:latest
+COPY --from=builder /server /server
 
-WORKDIR /app
+# 配置文件默认路径（可通过环境变量 CONFIG_PATH 覆盖）
+COPY config.json /app/config.json
+ENV CONFIG_PATH=/app/config.json
 
-COPY --from=builder /app/server .
+EXPOSE 80
 
-EXPOSE 8080
-
-CMD ["./server"]
+CMD ["/server"]

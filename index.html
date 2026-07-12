@@ -198,7 +198,7 @@
                 sources = await resp.json();
                 var tabsHtml = '';
                 sources.forEach(function(s, idx) {
-                    tabsHtml += '<button class="tab-btn' + (idx === 0 ? ' active' : '') + '" data-source="' + s.name + '" onclick="switchTab(\'' + s.name + '\')">' + s.label + '</button>';
+                    tabsHtml += '<button class="tab-btn' + (idx === 0 ? ' active' : '') + '" data-source="' + s.name.replace(/'/g, "\\'") + '" onclick="switchTab(\'' + encodeURIComponent(s.name) + '\')">' + s.label.replace(/'/g, "\\'") + '</button>';
                 });
                 document.getElementById('sourceTabs').innerHTML = tabsHtml;
                 if (sources.length > 0) {
@@ -208,10 +208,16 @@
             } catch (e) { console.error('加载爬虫源失败:', e); }
         }
 
-        function switchTab(source) {
+        function switchTab(raw) {
+            var source = decodeURIComponent(raw);
             currentSource = source;
-            document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
-            document.querySelector('.tab-btn[data-source="' + source + '"]').classList.add('active');
+            document.querySelectorAll('.tab-btn').forEach(function(b) {
+                if (b.getAttribute('data-source') === source) {
+                    b.classList.add('active');
+                } else {
+                    b.classList.remove('active');
+                }
+            });
             loadImages(1, pageSize);
         }
 
@@ -333,20 +339,9 @@
 
         async function loadImages(page, size) {
             var data = await fetchImages(page, size);
-            if (page === 1) { await fetchAllImages(); }
+            allImages = data.allImages || data.images || [];
             renderImages(data.images);
             updatePagination(data);
-        }
-
-        async function fetchAllImages() {
-            try {
-                var response = await fetch('/api/images?source=' + currentSource + '&page=1&pageSize=' + (totalImages || 1000));
-                var data = await response.json();
-                allImages = data.allImages || data.images || [];
-            } catch (error) {
-                console.error('获取所有图片列表失败:', error);
-                allImages = [];
-            }
         }
 
         async function refreshImages() {

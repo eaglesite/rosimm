@@ -247,8 +247,8 @@
                         '</div>' +
                     '</div>' +
                     '<div class="btn-group">' +
-                        '<button class="btn btn-start" id="' + source.name + 'StartBtn" onclick="startSpider(\'' + source.name + '\')">启动爬虫</button>' +
-                        '<button class="btn btn-stop" id="' + source.name + 'StopBtn" onclick="stopSpider(\'' + source.name + '\')" disabled>停止爬虫</button>' +
+                        '<button class="btn btn-start" id="' + source.name.replace(/'/g, "\\'") + 'StartBtn" onclick="startSpider(\'' + encodeURIComponent(source.name) + '\')">启动爬虫</button>' +
+                        '<button class="btn btn-stop" id="' + source.name.replace(/'/g, "\\'") + 'StopBtn" onclick="stopSpider(\'' + encodeURIComponent(source.name) + '\')" disabled>停止爬虫</button>' +
                     '</div>' +
                 '</div>' +
             '</div>';
@@ -261,7 +261,7 @@
                 var tabsHtml = '';
                 var contentHtml = '';
                 sources.forEach(function(s, idx) {
-                    tabsHtml += '<button class="tab-btn' + (idx === 0 ? ' active' : '') + '" data-source="' + s.name + '" onclick="switchTab(\'' + s.name + '\')">' + s.label + ' (' + s.name + ')</button>';
+                    tabsHtml += '<button class="tab-btn' + (idx === 0 ? ' active' : '') + '" data-source="' + s.name.replace(/'/g, "\\'") + '">' + s.label.replace(/'/g, "\\'") + ' (' + s.name.replace(/'/g, "\\'") + ')</button>';
                     contentHtml += createTabContent(s);
                 });
                 getEl('sourceTabs').innerHTML = tabsHtml;
@@ -274,10 +274,24 @@
         }
 
         function switchTab(source) {
-            document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
-            document.querySelectorAll('.tab-content').forEach(function(c) { c.classList.remove('active'); });
-            document.querySelector('.tab-btn[data-source="' + source + '"]').classList.add('active');
-            getEl('tab-' + source).classList.add('active');
+            // stop polling old source
+            Object.keys(refreshIntervals).forEach(function(k) {
+                if (k !== source) stopPolling(k);
+            });
+            document.querySelectorAll('.tab-btn').forEach(function(b) {
+                if (b.getAttribute('data-source') === source) {
+                    b.classList.add('active');
+                } else {
+                    b.classList.remove('active');
+                }
+            });
+            document.querySelectorAll('.tab-content').forEach(function(c) {
+                if (c.id === 'tab-' + source) {
+                    c.classList.add('active');
+                } else {
+                    c.classList.remove('active');
+                }
+            });
             fetchStatus(source);
         }
 
@@ -336,7 +350,8 @@
             } catch (e) { console.error('获取状态失败:', e); }
         }
 
-        async function startSpider(source) {
+        async function startSpider(raw) {
+            var source = decodeURIComponent(raw);
             var type = getEl(source + 'ImgType').value;
             var start = parseInt(getEl(source + 'StartPage').value) || 1;
             var end = parseInt(getEl(source + 'EndPage').value) || 100;
@@ -370,7 +385,8 @@
             }
         }
 
-        async function stopSpider(source) {
+        async function stopSpider(raw) {
+            var source = decodeURIComponent(raw);
             var btn = getEl(source + 'StopBtn');
             btn.disabled = true;
             btn.innerHTML = '停止中... <span class="refresh-indicator"></span>';
@@ -533,6 +549,11 @@
             loadSources();
             fetchScheduleStatus();
             fetchRequestConfig();
+            // event delegation for tab clicks (XSS safe)
+            getEl('sourceTabs').addEventListener('click', function(e) {
+                var btn = e.target.closest('.tab-btn');
+                if (btn) switchTab(btn.getAttribute('data-source'));
+            });
         };
 
         window.onbeforeunload = function() {

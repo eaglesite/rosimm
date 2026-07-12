@@ -48,10 +48,12 @@ var (
 	sessionsMutex sync.Mutex
 
 	scheduledConfigMutex sync.Mutex
-	lastScheduledRun     string
+	lastScheduledRun     time.Time
 
 	imageCache     = make(map[string][]string)
 	imageCacheMu   sync.RWMutex
+
+	dataDir string
 )
 
 type sessionData struct {
@@ -164,7 +166,7 @@ func applyRequestConfigDefaults(cfg *Config) {
 }
 
 func loadConfig() Config {
-	file, err := os.ReadFile("config.json")
+	file, err := os.ReadFile(configPath)
 	if err != nil {
 		fmt.Println("配置文件不存在，使用默认配置")
 		return defaultConfig()
@@ -229,6 +231,14 @@ func getSource(name string) *Source {
 	return nil
 }
 
+var configPath = "config.json"
+
+func init() {
+	if v := os.Getenv("CONFIG_PATH"); v != "" {
+		configPath = v
+	}
+}
+
 func saveConfigFile() {
 	newCfg := Config{
 		AdminPassword:    adminPassword,
@@ -240,13 +250,15 @@ func saveConfigFile() {
 	}
 	file, err := json.MarshalIndent(newCfg, "", "    ")
 	if err == nil {
-		os.WriteFile("config.json", file, 0644)
+		if err := os.WriteFile(configPath, file, 0644); err != nil {
+			fmt.Printf("[配置] 保存失败（只读文件系统？）: %v\n", err)
+		}
 	}
 }
 
 func getImageFiles() ([]string, error) {
 	var images []string
-	err := filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
+	err := filepath.Walk(dataDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -338,6 +350,26 @@ func validateSession(sessionID string) bool {
 	return true
 }
 
+func cleanExpiredSessions() {
+	sessionsMutex.Lock()
+	defer sessionsMutex.Unlock()
+	now := time.Now()
+	for id, data := range sessions {
+		if now.After(data.expireAt) {
+			delete(sessions, id)
+		}
+	}
+}
+
+func startSessionCleaner() {
+	go func() {
+		for {
+			time.Sleep(1 * time.Hour)
+			cleanExpiredSessions()
+		}
+	}()
+}
+
 func deleteSession(sessionID string) {
 	sessionsMutex.Lock()
 	delete(sessions, sessionID)
@@ -411,7 +443,7 @@ func spiderSaveImage(source, imgUrl, name, logPrefix string, stats *spiderStatsD
 		if err == nil {
 			break
 		}
-		fmt.Printf(logPrefix+"获取图片失败 (尝试 %d/%d): %v\n", attempt+1, rc.RetryCount+1, err)
+		fmt.Printf("%s获取图片失败 (尝试 %d/%d): %v\n", logPrefix, attempt+1, rc.RetryCount+1, err)
 		if attempt < rc.RetryCount {
 			for i := 0; i < rc.RetryDelay*10; i++ {
 				spiderMutex.Lock()
@@ -427,14 +459,14 @@ func spiderSaveImage(source, imgUrl, name, logPrefix string, stats *spiderStatsD
 	if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		if err == nil {
 			resp.Body.Close()
-			fmt.Printf(logPrefix+"获取图片返回非正常状态码: %d，跳过\n", resp.StatusCode)
+			fmt.Printf("%s获取图片返回非正常状态码: %d，跳过\n", logPrefix, resp.StatusCode)
 		}
 		fmt.Println(logPrefix + "获取图片错误，已跳过")
 		return
 	}
 	defer resp.Body.Close()
 
-	out, err := os.Create(imgname)
+	out, err := os.Create(filepath.Join(dataDir, imgname))
 	if err != nil {
 		fmt.Println(logPrefix + "创建文件错误，跳过")
 		return
@@ -554,17 +586,16 @@ func runSpider(source, imgType string, startPage, endPage int) {
 
 done:
 
+	spiderMutex.Lock()
 	stats.Lock()
-	if stopped {
+	if !*running || stopped {
 		stats.Status = "stopped"
 	} else {
 		stats.Status = "finished"
 	}
 	stats.CurrentPage = endPage
-	stats.Unlock()
-
-	spiderMutex.Lock()
 	*running = false
+	stats.Unlock()
 	spiderMutex.Unlock()
 
 	fmt.Printf("[%s] 爬虫运行完成\n", source)
@@ -617,7 +648,7 @@ func runScheduledCrawl(source, imgType string) {
 
 	c.OnHTML("div.outerwide ul.mainList", func(e *colly.HTMLElement) {
 		e.ForEach(".item a img.mainList_cover", func(i int, element *colly.HTMLElement) {
-			url := element.Attr("src")
+			imgSrc := element.Attr("src")
 			name := element.Attr("title")
 			imgname := name + ".jpg"
 
@@ -626,13 +657,13 @@ func runScheduledCrawl(source, imgType string) {
 				return
 			}
 			allExist = false
-			spiderSaveImage(source, url, name, logPrefix, stats, running)
+			spiderSaveImage(source, imgSrc, name, logPrefix, stats, running)
 		})
 	})
 
 	c.OnHTML("div.outerwide ul.block2", func(e *colly.HTMLElement) {
 		e.ForEach("li", func(i int, element *colly.HTMLElement) {
-			url := element.ChildAttr("div.portfolio-thumb img", "src")
+			imgSrc := element.ChildAttr("div.portfolio-thumb img", "src")
 			name := element.ChildAttr("div.portfolio-thumb img", "title")
 			imgname := name + ".jpg"
 
@@ -641,7 +672,7 @@ func runScheduledCrawl(source, imgType string) {
 				return
 			}
 			allExist = false
-			spiderSaveImage(source, url, name, logPrefix, stats, running)
+			spiderSaveImage(source, imgSrc, name, logPrefix, stats, running)
 		})
 	})
 
@@ -660,21 +691,14 @@ func runScheduledCrawl(source, imgType string) {
 	}
 
 	spiderMutex.Lock()
-	if !*running {
-		stopped = true
-	}
-	spiderMutex.Unlock()
-
 	stats.Lock()
-	if stopped {
+	if !*running || stopped {
 		stats.Status = "stopped"
 	} else {
 		stats.Status = "finished"
 	}
-	stats.Unlock()
-
-	spiderMutex.Lock()
 	*running = false
+	stats.Unlock()
 	spiderMutex.Unlock()
 
 	fmt.Println(logPrefix + "每日定时爬取完成")
@@ -693,8 +717,10 @@ func startScheduler() {
 		scheduledTime := config.Schedule.Time
 		imgType := config.Schedule.ImgType
 
-		if enabled && currentTime == scheduledTime && lastScheduledRun != currentDate {
-			lastScheduledRun = currentDate
+		runToday := lastScheduledRun.Format("2006-01-02") == currentDate
+		alreadyRun := runToday && lastScheduledRun.Format("15:04") >= scheduledTime
+		if enabled && currentTime == scheduledTime && !alreadyRun {
+			lastScheduledRun = time.Now()
 			scheduledConfigMutex.Unlock()
 			fmt.Printf("[定时器] 到达预定时间 %s，开始执行每日定时爬取\n", scheduledTime)
 			for _, s := range config.Sources {
@@ -711,6 +737,17 @@ func startScheduler() {
 
 func main() {
 	initSourceStates()
+
+	if v := os.Getenv("DATA_DIR"); v != "" {
+		dataDir = v
+	} else {
+		dataDir = "."
+	}
+	os.MkdirAll(dataDir, 0755)
+
+	if v := os.Getenv("PORT"); v != "" {
+		serverPort = v
+	}
 
 	http.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "login.html")
@@ -825,7 +862,12 @@ func main() {
 	}))
 
 	http.Handle("/images/", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
-		http.StripPrefix("/images/", http.FileServer(http.Dir("."))).ServeHTTP(w, r)
+		ext := strings.ToLower(filepath.Ext(r.URL.Path))
+		if ext != ".jpg" && ext != ".jpeg" && ext != ".png" && ext != ".gif" {
+			http.NotFound(w, r)
+			return
+		}
+		http.StripPrefix("/images/", http.FileServer(http.Dir(dataDir))).ServeHTTP(w, r)
 	}))
 
 	http.HandleFunc("/api/sources", func(w http.ResponseWriter, r *http.Request) {
@@ -1077,6 +1119,10 @@ func main() {
 		sourceStatesMutex.Unlock()
 		spiderMutex.Unlock()
 
+		lastRunStr := ""
+		if !lastScheduledRun.IsZero() {
+			lastRunStr = lastScheduledRun.Format("2006-01-02 15:04")
+		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -1084,7 +1130,7 @@ func main() {
 			"time":      config.Schedule.Time,
 			"imgType":   config.Schedule.ImgType,
 			"nextRun":   config.Schedule.Time,
-			"lastRun":   lastScheduledRun,
+			"lastRun":   lastRunStr,
 			"isRunning": isRunning,
 		})
 	}))
@@ -1213,6 +1259,7 @@ func main() {
 	fmt.Println("图片预览服务器已启动")
 	fmt.Printf("访问地址: http://localhost:%s\n", serverPort)
 	fmt.Printf("管理页面: http://localhost:%s/admin\n", serverPort)
+	fmt.Printf("数据目录: %s\n", dataDir)
 
 	if config.Schedule.Enabled {
 		fmt.Printf("定时任务: 已启用，每日 %s 自动爬取\n", config.Schedule.Time)
@@ -1223,6 +1270,7 @@ func main() {
 
 	buildImageCache()
 	startScheduler()
+	startSessionCleaner()
 
 	srv := &http.Server{Addr: ":" + serverPort}
 
