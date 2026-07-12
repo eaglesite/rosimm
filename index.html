@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>美女模特</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #ffebf0 0%, #ffe4ec 20%, #ffd4e0 40%, #ffc8d4 60%, #ffe8ec 80%, #fff5f7 100%);
+            min-height: 100vh; padding: 20px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 20px; flex-wrap: wrap; gap: 15px;
+        }
+        h1 { color: white; font-size: 2.5rem; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }
+        .header-right { display: flex; gap: 15px; align-items: center; flex-wrap: wrap; }
+        .page-size-selector {
+            background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.5);
+            color: white; padding: 10px 15px; border-radius: 20px; font-size: 14px; cursor: pointer; outline: none;
+        }
+        .page-size-selector option { background: #667eea; color: white; }
+        .refresh-btn, .logout-btn {
+            padding: 12px 24px; border-radius: 30px; cursor: pointer; font-size: 16px;
+            transition: all 0.3s ease; display: flex; align-items: center; gap: 8px; border: 2px solid rgba(255,255,255,0.5);
+        }
+        .refresh-btn { background: rgba(255,255,255,0.2); color: white; }
+        .refresh-btn:hover { background: rgba(255,255,255,0.3); transform: scale(1.05); }
+        .refresh-btn:active { transform: scale(0.98); }
+        .refresh-btn.refreshing { animation: spin 1s linear infinite; }
+        .logout-btn { background: rgba(235, 51, 73, 0.8); color: white; border-color: rgba(235,51,73,0.5); }
+        .logout-btn:hover { background: rgba(235, 51, 73, 1); transform: scale(1.05); }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .stats {
+            background: rgba(255,255,255,0.1); padding: 10px 20px; border-radius: 20px; color: white; font-size: 14px;
+        }
+        .tabs { display: flex; gap: 0; margin-bottom: 20px; }
+        .tab-btn {
+            padding: 12px 30px; border: none; cursor: pointer; font-size: 15px; font-weight: 600;
+            background: rgba(255,255,255,0.15); color: #888; border-radius: 12px 12px 0 0;
+            transition: all 0.3s ease; margin-right: 4px;
+        }
+        .tab-btn.active { background: #d6336c; color: #fff; }
+        .tab-btn:hover:not(.active) { background: rgba(255,255,255,0.2); }
+        .gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 20px; padding: 20px;
+            background: rgba(255,255,255,0.1); border-radius: 15px; backdrop-filter: blur(10px);
+        }
+        .image-item {
+            background: white; border-radius: 12px; overflow: hidden;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.2); transition: transform 0.3s ease, box-shadow 0.3s ease; cursor: pointer;
+        }
+        .image-item:hover { transform: translateY(-5px); box-shadow: 0 12px 35px rgba(0,0,0,0.3); }
+        .image-item img { width: 100%; display: block; }
+        .image-item .info { padding: 15px; text-align: center; }
+        .image-item .info p { color: #666; font-size: 14px; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .modal {
+            display: none; position: fixed; z-index: 1000; padding-top: 50px;
+            left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.9);
+        }
+        .modal-content { margin: auto; display: block; max-width: 90%; max-height: 85vh; border-radius: 10px; }
+        .modal-content, #caption { animation-name: zoom; animation-duration: 0.3s; }
+        @keyframes zoom { from {transform:scale(0.8);opacity:0;} to {transform:scale(1);opacity:1;} }
+        .close {
+            position: absolute; top: 20px; right: 35px; color: #f1f1f1;
+            font-size: 40px; font-weight: bold; transition: 0.3s; cursor: pointer;
+        }
+        .close:hover, .close:focus { color: #bbb; text-decoration: none; cursor: pointer; }
+        .nav-btn {
+            position: absolute; top: 50%; transform: translateY(-50%);
+            background: rgba(0,0,0,0.5); border: none; color: white; font-size: 30px;
+            cursor: pointer; padding: 15px 20px; border-radius: 50%; transition: background 0.3s ease; z-index: 1001;
+        }
+        .nav-btn:hover { background: rgba(0,0,0,0.8); }
+        .nav-btn.prev { left: 20px; }
+        .nav-btn.next { right: 20px; }
+        .nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+        .modal-counter {
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.7); color: white; padding: 8px 16px; border-radius: 20px; font-size: 14px;
+        }
+        #caption { margin: auto; display: block; width: 80%; max-width: 700px; text-align: center; color: #ccc; padding: 10px 0; height: 50px; font-size: 18px; }
+        .loading { text-align: center; color: white; font-size: 18px; padding: 50px; }
+        .no-images { text-align: center; color: white; font-size: 20px; padding: 50px; }
+        .toast {
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.8); color: white; padding: 15px 30px;
+            border-radius: 30px; font-size: 16px; display: none; z-index: 2000;
+            animation: fadeInUp 0.3s ease;
+        }
+        @keyframes fadeInUp { from { opacity:0; transform:translateX(-50%) translateY(20px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
+        .pagination {
+            display: flex; justify-content: center; align-items: center; gap: 10px;
+            margin-top: 30px; padding: 20px;
+            background: rgba(255,255,255,0.1); border-radius: 15px; backdrop-filter: blur(10px);
+        }
+        .pagination button {
+            background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.5);
+            color: white; padding: 10px 18px; border-radius: 10px; cursor: pointer;
+            font-size: 14px; transition: all 0.3s ease; min-width: 45px;
+        }
+        .pagination button:hover:not(:disabled) { background: rgba(255,255,255,0.3); transform: scale(1.05); }
+        .pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .pagination button.active { background: rgba(255,255,255,0.5); font-weight: bold; }
+        .pagination .page-info { color: white; font-size: 14px; padding: 0 15px; }
+        .pagination .ellipsis { color: white; padding: 0 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>美女模特</h1>
+            <div class="header-right">
+                <div class="stats" id="stats">图片数量: 0</div>
+                <select class="page-size-selector" id="pageSizeSelector" onchange="onPageSizeChange()">
+                    <option value="10">每页10张</option>
+                    <option value="20" selected>每页20张</option>
+                    <option value="30">每页30张</option>
+                    <option value="50">每页50张</option>
+                    <option value="100">每页100张</option>
+                    <option value="200">每页200张</option>
+                </select>
+                <button class="refresh-btn" id="refreshBtn" onclick="refreshImages()">
+                    <span>&#x1F504;</span><span>刷新</span>
+                </button>
+                <button class="logout-btn" id="logoutBtn" onclick="logout()">
+                    <span>&#x1F6AA;</span><span>退出</span>
+                </button>
+            </div>
+        </div>
+
+        <div id="sourceTabs" class="tabs"></div>
+
+        <div class="loading" id="loading">加载中...</div>
+        <div class="gallery" id="gallery" style="display: none;"></div>
+        <div class="no-images" id="no-images" style="display: none;">暂无图片</div>
+
+        <div class="pagination" id="pagination" style="display: none;">
+            <button id="firstPageBtn" onclick="goToPage(1)" disabled>首页</button>
+            <button id="prevPageBtn" onclick="goToPrevPage()" disabled>上一页</button>
+            <span class="page-info" id="pageInfo">第 1 / 1 页</span>
+            <button id="nextPageBtn" onclick="goToNextPage()" disabled>下一页</button>
+            <button id="lastPageBtn" onclick="goToLastPage()" disabled>末页</button>
+            <div style="display:flex;align-items:center;gap:10px;">
+                <span style="color:white;font-size:14px;">跳转到:</span>
+                <input type="number" id="pageInput" style="width:60px;padding:8px;border-radius:8px;border:2px solid rgba(255,255,255,0.5);background:rgba(255,255,255,0.2);color:white;text-align:center;" min="1">
+                <button onclick="goToSpecificPage()">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="myModal" class="modal">
+        <span class="close" onclick="closeModal()">&times;</span>
+        <span class="modal-counter" id="modalCounter">1 / 1</span>
+        <button class="nav-btn prev" id="prevImgBtn" onclick="prevImage()" disabled>&#x2039;</button>
+        <img class="modal-content" id="img01">
+        <button class="nav-btn next" id="nextImgBtn" onclick="nextImage()" disabled>&#x203A;</button>
+        <div id="caption"></div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        var modal = document.getElementById('myModal');
+        var modalImg = document.getElementById('img01');
+        var captionText = document.getElementById('caption');
+        var modalCounter = document.getElementById('modalCounter');
+        var prevImgBtn = document.getElementById('prevImgBtn');
+        var nextImgBtn = document.getElementById('nextImgBtn');
+        var refreshBtn = document.getElementById('refreshBtn');
+        var statsDiv = document.getElementById('stats');
+        var pageSizeSelector = document.getElementById('pageSizeSelector');
+        var pagination = document.getElementById('pagination');
+        var pageInfo = document.getElementById('pageInfo');
+        var firstPageBtn = document.getElementById('firstPageBtn');
+        var prevPageBtn = document.getElementById('prevPageBtn');
+        var nextPageBtn = document.getElementById('nextPageBtn');
+        var lastPageBtn = document.getElementById('lastPageBtn');
+        var pageInput = document.getElementById('pageInput');
+
+        var sources = [];
+        var currentSource = '';
+        var currentPage = 1;
+        var pageSize = 20;
+        var totalPages = 1;
+        var totalImages = 0;
+        var allImages = [];
+        var currentImageIndex = 0;
+
+        async function loadSources() {
+            try {
+                var resp = await fetch('/api/sources');
+                sources = await resp.json();
+                var tabsHtml = '';
+                sources.forEach(function(s, idx) {
+                    tabsHtml += '<button class="tab-btn' + (idx === 0 ? ' active' : '') + '" data-source="' + s.name + '" onclick="switchTab(\'' + s.name + '\')">' + s.label + '</button>';
+                });
+                document.getElementById('sourceTabs').innerHTML = tabsHtml;
+                if (sources.length > 0) {
+                    currentSource = sources[0].name;
+                    loadImages(1, pageSize);
+                }
+            } catch (e) { console.error('加载爬虫源失败:', e); }
+        }
+
+        function switchTab(source) {
+            currentSource = source;
+            document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+            document.querySelector('.tab-btn[data-source="' + source + '"]').classList.add('active');
+            loadImages(1, pageSize);
+        }
+
+        function openModal(img) {
+            modal.style.display = "block";
+            modalImg.src = img.src;
+            captionText.innerHTML = img.alt;
+            currentImageIndex = allImages.indexOf(img.alt);
+            updateNavButtons();
+        }
+
+        function closeModal() { modal.style.display = "none"; }
+
+        function updateNavButtons() {
+            var total = allImages.length;
+            modalCounter.textContent = (currentImageIndex + 1) + " / " + total;
+            prevImgBtn.disabled = currentImageIndex <= 0;
+            nextImgBtn.disabled = currentImageIndex >= total - 1;
+        }
+
+        function prevImage() { if (currentImageIndex > 0) { currentImageIndex--; loadImageByIndex(currentImageIndex); } }
+        function nextImage() { if (currentImageIndex < allImages.length - 1) { currentImageIndex++; loadImageByIndex(currentImageIndex); } }
+
+        function loadImageByIndex(index) {
+            modalImg.src = 'images/' + allImages[index] + '?t=' + Date.now();
+            captionText.innerHTML = allImages[index];
+            updateNavButtons();
+        }
+
+        window.onclick = function(event) { if (event.target == modal) closeModal(); };
+
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') closeModal();
+            if (modal.style.display === "block") {
+                if (event.key === 'ArrowLeft') prevImage();
+                else if (event.key === 'ArrowRight') nextImage();
+            }
+        });
+
+        function showToast(message) {
+            var toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.style.display = 'block';
+            setTimeout(function() { toast.style.display = 'none'; }, 2000);
+        }
+
+        async function fetchImages(page, size) {
+            try {
+                var response = await fetch('/api/images?source=' + currentSource + '&page=' + page + '&pageSize=' + size);
+                var data = await response.json();
+                return data;
+            } catch (error) {
+                console.error('获取图片列表失败:', error);
+                return { images: [], count: 0, total: 0, page: 1, pageSize: size, totalPages: 1 };
+            }
+        }
+
+        function renderImages(images) {
+            var gallery = document.getElementById('gallery');
+            var loading = document.getElementById('loading');
+            var noImages = document.getElementById('no-images');
+
+            loading.style.display = 'none';
+
+            if (images.length === 0) {
+                noImages.style.display = 'block';
+                gallery.style.display = 'none';
+                pagination.style.display = 'none';
+                return;
+            }
+
+            noImages.style.display = 'none';
+            gallery.style.display = 'grid';
+            gallery.innerHTML = '';
+
+            images.forEach(function(imgName) {
+                var div = document.createElement('div');
+                div.className = 'image-item';
+                var img = document.createElement('img');
+                img.src = 'images/' + imgName + '?t=' + Date.now();
+                img.alt = imgName;
+                img.onclick = function() { openModal(img); };
+                img.onerror = function() {
+                    img.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><text y=".9em" font-size="20">图片加载失败</text></svg>';
+                };
+                var info = document.createElement('div');
+                info.className = 'info';
+                var p = document.createElement('p');
+                p.textContent = imgName;
+                info.appendChild(p);
+                div.appendChild(img);
+                div.appendChild(info);
+                gallery.appendChild(div);
+            });
+        }
+
+        function updatePagination(data) {
+            currentPage = data.page;
+            pageSize = data.pageSize;
+            totalPages = data.totalPages;
+            totalImages = data.total;
+
+            var label = '';
+            for (var i = 0; i < sources.length; i++) {
+                if (sources[i].name === currentSource) { label = sources[i].label; break; }
+            }
+            statsDiv.textContent = label ? label + ': ' + totalImages : '图片数量: ' + totalImages;
+            pageInfo.textContent = '第 ' + currentPage + ' / ' + totalPages + ' 页';
+            pageInput.value = currentPage;
+            pageInput.max = totalPages;
+
+            firstPageBtn.disabled = currentPage <= 1;
+            prevPageBtn.disabled = currentPage <= 1;
+            nextPageBtn.disabled = currentPage >= totalPages;
+            lastPageBtn.disabled = currentPage >= totalPages;
+
+            pagination.style.display = totalPages > 1 ? 'flex' : 'none';
+        }
+
+        async function loadImages(page, size) {
+            var data = await fetchImages(page, size);
+            if (page === 1) { await fetchAllImages(); }
+            renderImages(data.images);
+            updatePagination(data);
+        }
+
+        async function fetchAllImages() {
+            try {
+                var response = await fetch('/api/images?source=' + currentSource + '&page=1&pageSize=' + (totalImages || 1000));
+                var data = await response.json();
+                allImages = data.allImages || data.images || [];
+            } catch (error) {
+                console.error('获取所有图片列表失败:', error);
+                allImages = [];
+            }
+        }
+
+        async function refreshImages() {
+            refreshBtn.classList.add('refreshing');
+            refreshBtn.disabled = true;
+            await loadImages(1, pageSize);
+            refreshBtn.classList.remove('refreshing');
+            refreshBtn.disabled = false;
+            showToast('图片列表已刷新');
+        }
+
+        function goToPage(page) { if (page >= 1 && page <= totalPages) loadImages(page, pageSize); }
+        function goToPrevPage() { if (currentPage > 1) loadImages(currentPage - 1, pageSize); }
+        function goToNextPage() { if (currentPage < totalPages) loadImages(currentPage + 1, pageSize); }
+        function goToLastPage() { loadImages(totalPages, pageSize); }
+
+        function goToSpecificPage() {
+            var page = parseInt(pageInput.value);
+            if (!isNaN(page) && page >= 1 && page <= totalPages) { loadImages(page, pageSize); }
+            else { showToast('请输入有效的页码'); pageInput.value = currentPage; }
+        }
+
+        function onPageSizeChange() {
+            pageSize = parseInt(pageSizeSelector.value);
+            loadImages(1, pageSize);
+        }
+
+        pageInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') goToSpecificPage();
+        });
+
+        async function logout() {
+            try {
+                var response = await fetch('/api/logout', { method: 'POST' });
+                var data = await response.json();
+                if (data.success) window.location.href = '/login';
+            } catch (e) { window.location.href = '/login'; }
+        }
+
+        window.onload = function() { loadSources(); };
+    </script>
+</body>
+</html>

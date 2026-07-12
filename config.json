@@ -1,0 +1,40 @@
+{
+    "admin_password": "admin",
+    "frontend_password": "123456",
+    "server_port": "80",
+    "schedule": {
+        "enabled": true,
+        "time": "15:20",
+        "img_type": "new"
+    },
+    "request_config": {
+        "timeout": 120,
+        "user_agent": "",
+        "retry_count": 3,
+        "retry_delay": 1,
+        "proxy": "",
+        "headers": {
+            "Accept-Language": "zh-CN,zh;q=0.9",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache"
+        }
+    },
+    "sources": [
+        {
+            "name": "rosi",
+            "label": "图片系列",
+            "prefix": "NO.",
+            "urls": [
+                "https://rosi51.com/rosi?page=%d\u0026type=%s"
+            ]
+        },
+        {
+            "name": "kz",
+            "label": "口罩系列",
+            "prefix": "KZ.",
+            "urls": [
+                "https://rosi51.com/kz/index?page=%d\u0026type=%s"
+            ]
+        }
+    ]
+}

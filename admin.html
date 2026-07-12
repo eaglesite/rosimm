@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>爬虫管理</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #ffebf0 0%, #ffe4ec 20%, #ffd4e0 40%, #ffc8d4 60%, #ffe8ec 80%, #fff5f7 100%);
+            min-height: 100vh; padding: 20px; color: #5d4e60;
+        }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 30px; flex-wrap: wrap; gap: 15px;
+        }
+        h1 { font-size: 2rem; }
+        .nav-links { display: flex; gap: 10px; }
+        .nav-links a, .logout-btn {
+            padding: 10px 20px; border-radius: 20px; color: white; text-decoration: none;
+            transition: all 0.3s ease; border: none; cursor: pointer; font-size: 14px;
+        }
+        .nav-links a { background: rgba(255,255,255,0.1); }
+        .nav-links a:hover { background: rgba(255,255,255,0.2); transform: scale(1.05); }
+        .logout-btn { background: rgba(235, 51, 73, 0.8); }
+        .logout-btn:hover { background: rgba(235, 51, 73, 1); transform: scale(1.05); }
+        .tabs { display: flex; gap: 0; margin-bottom: 0; }
+        .tab-btn {
+            padding: 12px 30px; border: none; cursor: pointer; font-size: 15px; font-weight: 600;
+            background: rgba(255,255,255,0.15); color: #888; border-radius: 12px 12px 0 0;
+            transition: all 0.3s ease; margin-right: 4px;
+        }
+        .tab-btn.active { background: #d6336c; color: #fff; }
+        .tab-btn:hover:not(.active) { background: rgba(255,255,255,0.2); }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .card {
+            background: rgba(255,255,255,0.15); border-radius: 15px; padding: 25px;
+            margin-bottom: 25px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1);
+        }
+        .status-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .status-title { font-size: 1.3rem; font-weight: 600; }
+        .status-badge { padding: 8px 20px; border-radius: 25px; font-size: 14px; font-weight: 600; }
+        .status-badge.running { background: linear-gradient(135deg, #11998e, #38ef7d); color: #000; animation: pulse 2s infinite; }
+        .status-badge.stopped { background: linear-gradient(135deg, #eb3349, #f45c43); }
+        .status-badge.finished { background: linear-gradient(135deg, #4facfe, #00f2fe); color: #000; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
+        .stat-item { background: rgba(255,255,255,0.05); padding: 12px; border-radius: 10px; text-align: center; }
+        .stat-value { font-size: 1.8rem; font-weight: bold; }
+        .stat-label { font-size: 12px; color: #aaa; margin-top: 5px; }
+        .progress-bar { width: 100%; height: 8px; background: rgba(255,255,255,0.1); border-radius: 5px; overflow: hidden; margin: 12px 0; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, #00d2ff, #3a7bd5); border-radius: 5px; transition: width 0.3s ease; }
+        .progress-text { font-size: 13px; color: #aaa; text-align: center; }
+        .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-size: 13px; color: #aaa; margin-bottom: 6px; }
+        input, select {
+            width: 100%; padding: 10px 12px; border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 10px; background: rgba(255,255,255,0.05); color: white; font-size: 13px; outline: none;
+        }
+        input:focus, select:focus { border-color: #00d2ff; }
+        select option { background: #1a1a2e; color: white; }
+        .btn-group { display: flex; gap: 12px; margin-top: 15px; }
+        .btn {
+            flex: 1; padding: 12px 24px; border: none; border-radius: 10px;
+            font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.3s ease;
+        }
+        .btn-start { background: linear-gradient(135deg, #11998e, #38ef7d); color: #000; }
+        .btn-start:hover:not(:disabled) { transform: scale(1.02); box-shadow: 0 5px 20px rgba(17,153,142,0.4); }
+        .btn-stop { background: linear-gradient(135deg, #eb3349, #f45c43); color: white; }
+        .btn-stop:hover:not(:disabled) { transform: scale(1.02); box-shadow: 0 5px 20px rgba(235,51,73,0.4); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-change-pwd { background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
+        .btn-change-pwd:hover:not(:disabled) { transform: scale(1.02); box-shadow: 0 5px 20px rgba(102,126,234,0.4); }
+        .toast {
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.8); color: white; padding: 15px 30px;
+            border-radius: 30px; font-size: 16px; display: none; z-index: 2000;
+            animation: fadeInUp 0.3s ease;
+        }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateX(-50%) translateY(20px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+        .refresh-indicator { display: inline-block; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #00d2ff; border-radius: 50%; animation: spin 1s linear infinite; margin-left: 8px; vertical-align: middle; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .schedule-info { font-size: 13px; color: #999; margin-bottom: 12px; }
+        .schedule-note { margin-top: 10px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 8px; font-size: 12px; color: #aaa; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>&#x1F578; 爬虫管理</h1>
+            <div class="nav-links">
+                <a href="/">图片预览</a>
+                <a href="/admin" class="active">管理面板</a>
+                <button class="logout-btn" onclick="logout()">&#x1F6AA; 退出</button>
+            </div>
+        </div>
+
+        <div id="sourceTabs" class="tabs"></div>
+        <div id="sourceTabContents"></div>
+
+        <div class="card">
+            <div class="status-title" style="margin-bottom:15px;">&#x23F0; 每日定时爬取</div>
+            <div class="form-group">
+                <label style="display:flex;align-items:center;gap:10px;">
+                    <input type="checkbox" id="scheduleEnabled" onchange="toggleScheduleEnabled()" style="width:auto;">
+                    <span>启用每日定时爬取</span>
+                </label>
+                <span style="font-size:12px;color:#999;margin-left:25px;">启用后每天自动爬取所有系列的第一页</span>
+            </div>
+            <div class="form-row" id="scheduleSettings">
+                <div class="form-group">
+                    <label for="scheduleTime">执行时间</label>
+                    <input type="time" id="scheduleTime" value="08:00">
+                </div>
+                <div class="form-group">
+                    <label for="scheduleType">图片类型</label>
+                    <select id="scheduleType">
+                        <option value="new">新榜 (new)</option>
+                        <option value="all">总榜 (all)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="schedule-info">
+                状态: <span id="scheduleStatus">未启用</span>
+                <span id="lastRunInfo" style="margin-left:15px;"></span>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-start" id="saveScheduleBtn" onclick="saveSchedule()">保存设置</button>
+            </div>
+            <div class="schedule-note">&#x1F4A1; 说明：定时任务在每天指定时间执行一次，自动爬取所有系列的第一页。图片已存在则跳过。</div>
+        </div>
+
+        <div class="card">
+            <div class="status-title" style="margin-bottom:15px;">&#x2699; 请求配置</div>
+            <div style="margin-bottom:12px;font-size:13px;color:#999;">全局 HTTP 请求参数，影响所有爬虫的请求行为。修改后下次启动爬虫生效。</div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="reqTimeout">超时时间（秒）</label>
+                    <input type="number" id="reqTimeout" min="10" value="120">
+                </div>
+                <div class="form-group">
+                    <label for="reqRetryCount">重试次数</label>
+                    <input type="number" id="reqRetryCount" min="0" value="3">
+                </div>
+                <div class="form-group">
+                    <label for="reqRetryDelay">重试间隔（秒）</label>
+                    <input type="number" id="reqRetryDelay" min="1" value="1">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group" style="flex:2;">
+                    <label for="reqUserAgent">User-Agent（留空自动随机）</label>
+                    <input type="text" id="reqUserAgent" placeholder="留空则自动随机">
+                </div>
+                <div class="form-group" style="flex:1;">
+                    <label for="reqProxy">代理地址（可选）</label>
+                    <input type="text" id="reqProxy" placeholder="如 http://127.0.0.1:8080">
+                </div>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-start" id="saveReqConfigBtn" onclick="saveRequestConfig()">保存请求配置</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="status-title" style="margin-bottom:15px;">&#x1F504; 系统维护</div>
+            <div style="margin-bottom:10px;font-size:13px;color:#999;">图片列表缓存在内存中，新增图片后自动更新。如需强制重建（如外部文件变动），请点击下方按钮。</div>
+            <div class="btn-group">
+                <button class="btn btn-start" id="rebuildCacheBtn" onclick="rebuildCache()">重建图片缓存</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="status-title" style="margin-bottom:15px;">&#x1F510; 修改密码</div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="oldPassword">旧密码</label>
+                    <input type="password" id="oldPassword" placeholder="请输入旧密码">
+                </div>
+                <div class="form-group">
+                    <label for="newPassword">新密码</label>
+                    <input type="password" id="newPassword" placeholder="请输入新密码（至少4位）">
+                </div>
+                <div class="form-group">
+                    <label for="confirmPassword">确认新密码</label>
+                    <input type="password" id="confirmPassword" placeholder="请再次输入新密码">
+                </div>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-change-pwd" id="changePwdBtn" onclick="changePassword()">修改密码</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        var sources = [];
+        var refreshIntervals = {};
+
+        function showToast(message) {
+            var toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.style.display = 'block';
+            setTimeout(function() { toast.style.display = 'none'; }, 3000);
+        }
+
+        function getEl(id) { return document.getElementById(id); }
+
+        function createTabContent(source) {
+            return '<div id="tab-' + source.name + '" class="tab-content">' +
+                '<div class="card">' +
+                    '<div class="status-header">' +
+                        '<span class="status-title">&#x1F578; ' + source.label + '爬虫</span>' +
+                        '<span class="status-badge stopped" id="' + source.name + 'StatusBadge">已停止</span>' +
+                    '</div>' +
+                    '<div class="stats-grid">' +
+                        '<div class="stat-item"><div class="stat-value" id="' + source.name + 'CurrentPage">0</div><div class="stat-label">当前页数</div></div>' +
+                        '<div class="stat-item"><div class="stat-value" id="' + source.name + 'TotalPages">0</div><div class="stat-label">总页数</div></div>' +
+                        '<div class="stat-item"><div class="stat-value" id="' + source.name + 'ImagesSaved">0</div><div class="stat-label">已保存图片</div></div>' +
+                        '<div class="stat-item"><div class="stat-value" id="' + source.name + 'StartTime">-</div><div class="stat-label">启动时间</div></div>' +
+                    '</div>' +
+                    '<div class="progress-bar"><div class="progress-fill" id="' + source.name + 'ProgressFill" style="width:0%"></div></div>' +
+                    '<div class="progress-text" id="' + source.name + 'ProgressText">进度: 0%</div>' +
+                '</div>' +
+                '<div class="card">' +
+                    '<div class="status-title" style="margin-bottom:15px;">爬虫参数设置</div>' +
+                    '<div class="form-row">' +
+                        '<div class="form-group">' +
+                            '<label for="' + source.name + 'ImgType">图片类型</label>' +
+                            '<select id="' + source.name + 'ImgType">' +
+                                '<option value="new">新榜 (new)</option>' +
+                                '<option value="all">总榜 (all)</option>' +
+                            '</select>' +
+                        '</div>' +
+                        '<div class="form-group">' +
+                            '<label for="' + source.name + 'StartPage">起始页数</label>' +
+                            '<input type="number" id="' + source.name + 'StartPage" min="1" value="1">' +
+                        '</div>' +
+                        '<div class="form-group">' +
+                            '<label for="' + source.name + 'EndPage">结束页数</label>' +
+                            '<input type="number" id="' + source.name + 'EndPage" min="1" value="100">' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="btn-group">' +
+                        '<button class="btn btn-start" id="' + source.name + 'StartBtn" onclick="startSpider(\'' + source.name + '\')">启动爬虫</button>' +
+                        '<button class="btn btn-stop" id="' + source.name + 'StopBtn" onclick="stopSpider(\'' + source.name + '\')" disabled>停止爬虫</button>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+        }
+
+        async function loadSources() {
+            try {
+                var resp = await fetch('/api/sources');
+                sources = await resp.json();
+                var tabsHtml = '';
+                var contentHtml = '';
+                sources.forEach(function(s, idx) {
+                    tabsHtml += '<button class="tab-btn' + (idx === 0 ? ' active' : '') + '" data-source="' + s.name + '" onclick="switchTab(\'' + s.name + '\')">' + s.label + ' (' + s.name + ')</button>';
+                    contentHtml += createTabContent(s);
+                });
+                getEl('sourceTabs').innerHTML = tabsHtml;
+                getEl('sourceTabContents').innerHTML = contentHtml;
+                if (sources.length > 0) {
+                    getEl('tab-' + sources[0].name).classList.add('active');
+                    fetchStatus(sources[0].name);
+                }
+            } catch (e) { console.error('加载爬虫源失败:', e); }
+        }
+
+        function switchTab(source) {
+            document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+            document.querySelectorAll('.tab-content').forEach(function(c) { c.classList.remove('active'); });
+            document.querySelector('.tab-btn[data-source="' + source + '"]').classList.add('active');
+            getEl('tab-' + source).classList.add('active');
+            fetchStatus(source);
+        }
+
+        function updateStatus(source, data) {
+            getEl(source + 'CurrentPage').textContent = data.currentPage || 0;
+            getEl(source + 'TotalPages').textContent = data.totalPages || 0;
+            getEl(source + 'ImagesSaved').textContent = data.imagesSaved || 0;
+
+            if (data.startTime && data.startTime !== "0001-01-01T00:00:00Z") {
+                getEl(source + 'StartTime').textContent = new Date(data.startTime).toLocaleString('zh-CN');
+            } else {
+                getEl(source + 'StartTime').textContent = '-';
+            }
+
+            var badge = getEl(source + 'StatusBadge');
+            var startBtn = getEl(source + 'StartBtn');
+            var stopBtn = getEl(source + 'StopBtn');
+            var fill = getEl(source + 'ProgressFill');
+            var text = getEl(source + 'ProgressText');
+
+            if (data.running) {
+                badge.className = 'status-badge running';
+                badge.textContent = '运行中';
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+
+                var progress = data.totalPages > 0 ? Math.round((data.currentPage / data.totalPages) * 100) : 0;
+                fill.style.width = progress + '%';
+                text.textContent = '进度: ' + progress + '% (第 ' + data.currentPage + '/' + data.totalPages + ' 页)';
+            } else {
+                if (data.status === 'finished') {
+                    badge.className = 'status-badge finished';
+                    badge.textContent = '已完成';
+                } else {
+                    badge.className = 'status-badge stopped';
+                    badge.textContent = '已停止';
+                }
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+
+                if (data.totalPages > 0) {
+                    fill.style.width = '100%';
+                    text.textContent = '已完成: 共 ' + data.totalPages + ' 页';
+                } else {
+                    fill.style.width = '0%';
+                    text.textContent = '进度: 0%';
+                }
+            }
+        }
+
+        async function fetchStatus(source) {
+            try {
+                var response = await fetch('/api/spider/status?source=' + source);
+                var data = await response.json();
+                updateStatus(source, data);
+            } catch (e) { console.error('获取状态失败:', e); }
+        }
+
+        async function startSpider(source) {
+            var type = getEl(source + 'ImgType').value;
+            var start = parseInt(getEl(source + 'StartPage').value) || 1;
+            var end = parseInt(getEl(source + 'EndPage').value) || 100;
+
+            if (start < 1) { showToast('起始页数必须大于0'); return; }
+            if (end < start) { showToast('结束页数必须大于等于起始页数'); return; }
+
+            var btn = getEl(source + 'StartBtn');
+            btn.disabled = true;
+            btn.innerHTML = '启动中... <span class="refresh-indicator"></span>';
+
+            try {
+                var response = await fetch('/api/spider/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: 'source=' + source + '&imgType=' + type + '&startPage=' + start + '&endPage=' + end
+                });
+                var data = await response.json();
+                if (data.success) {
+                    showToast(data.message);
+                    startPolling(source);
+                } else {
+                    showToast(data.message);
+                    btn.disabled = false;
+                    btn.innerHTML = '启动爬虫';
+                }
+            } catch (e) {
+                showToast('启动失败: ' + e.message);
+                btn.disabled = false;
+                btn.innerHTML = '启动爬虫';
+            }
+        }
+
+        async function stopSpider(source) {
+            var btn = getEl(source + 'StopBtn');
+            btn.disabled = true;
+            btn.innerHTML = '停止中... <span class="refresh-indicator"></span>';
+
+            try {
+                var response = await fetch('/api/spider/stop', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: 'source=' + source
+                });
+                var data = await response.json();
+                showToast(data.message);
+                if (data.success) {
+                    stopPolling(source);
+                }
+            } catch (e) { showToast('停止失败: ' + e.message); }
+
+            await fetchStatus(source);
+        }
+
+        function startPolling(source) {
+            if (refreshIntervals[source]) clearInterval(refreshIntervals[source]);
+            refreshIntervals[source] = setInterval(function() { fetchStatus(source); }, 2000);
+        }
+
+        function stopPolling(source) {
+            if (refreshIntervals[source]) { clearInterval(refreshIntervals[source]); refreshIntervals[source] = null; }
+        }
+
+        async function fetchScheduleStatus() {
+            try {
+                var response = await fetch('/api/schedule/status');
+                var data = await response.json();
+                getEl('scheduleEnabled').checked = data.enabled;
+                getEl('scheduleTime').value = data.time;
+                getEl('scheduleType').value = data.imgType;
+                getEl('scheduleStatus').textContent = data.enabled ? '已启用' : '未启用';
+                getEl('scheduleStatus').style.color = data.enabled ? '#38ef7d' : '#999';
+                getEl('lastRunInfo').textContent = data.lastRun ? '上次执行: ' + data.lastRun : '尚未执行过';
+                toggleScheduleEnabled();
+            } catch (e) { console.error('获取定时任务状态失败:', e); }
+        }
+
+        function toggleScheduleEnabled() {
+            var enabled = getEl('scheduleEnabled').checked;
+            getEl('scheduleTime').disabled = !enabled;
+            getEl('scheduleType').disabled = !enabled;
+        }
+
+        async function saveSchedule() {
+            var enabled = getEl('scheduleEnabled').checked;
+            var runTime = getEl('scheduleTime').value;
+            var imgType = getEl('scheduleType').value;
+            var btn = getEl('saveScheduleBtn');
+            btn.disabled = true;
+            btn.innerHTML = '保存中... <span class="refresh-indicator"></span>';
+
+            try {
+                var response = await fetch('/api/schedule/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: 'enabled=' + enabled + '&time=' + runTime + '&imgType=' + imgType
+                });
+                var data = await response.json();
+                if (data.success) { showToast(data.message); fetchScheduleStatus(); }
+                else { showToast(data.message); }
+            } catch (e) { showToast('保存失败: ' + e.message); }
+            finally { btn.disabled = false; btn.innerHTML = '保存设置'; }
+        }
+
+        async function logout() {
+            try {
+                var response = await fetch('/api/logout', { method: 'POST' });
+                var data = await response.json();
+                if (data.success) window.location.href = '/login_admin';
+            } catch (e) { window.location.href = '/login'; }
+        }
+
+        async function changePassword() {
+            var oldPassword = getEl('oldPassword').value;
+            var newPassword = getEl('newPassword').value;
+            var confirmPassword = getEl('confirmPassword').value;
+            var btn = getEl('changePwdBtn');
+
+            if (!oldPassword.trim()) { showToast('请输入旧密码'); return; }
+            if (!newPassword.trim()) { showToast('请输入新密码'); return; }
+            if (newPassword.length < 4) { showToast('新密码长度不能少于4位'); return; }
+            if (newPassword !== confirmPassword) { showToast('两次输入的新密码不一致'); return; }
+
+            btn.disabled = true;
+            btn.innerHTML = '修改中... <span class="refresh-indicator"></span>';
+
+            try {
+                var response = await fetch('/api/password/change', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: 'oldPassword=' + encodeURIComponent(oldPassword) + '&newPassword=' + encodeURIComponent(newPassword)
+                });
+                var data = await response.json();
+                if (data.success) {
+                    showToast(data.message);
+                    getEl('oldPassword').value = '';
+                    getEl('newPassword').value = '';
+                    getEl('confirmPassword').value = '';
+                } else { showToast(data.message); }
+            } catch (e) { showToast('修改失败，请重试'); }
+            finally { btn.disabled = false; btn.innerHTML = '修改密码'; }
+        }
+
+        async function fetchRequestConfig() {
+            try {
+                var resp = await fetch('/api/request-config');
+                var data = await resp.json();
+                getEl('reqTimeout').value = data.timeout || 120;
+                getEl('reqRetryCount').value = data.retry_count || 3;
+                getEl('reqRetryDelay').value = data.retry_delay || 1;
+                getEl('reqUserAgent').value = data.user_agent || '';
+                getEl('reqProxy').value = data.proxy || '';
+            } catch (e) { console.error('获取请求配置失败:', e); }
+        }
+
+        async function saveRequestConfig() {
+            var timeout = parseInt(getEl('reqTimeout').value) || 120;
+            var retryCount = parseInt(getEl('reqRetryCount').value);
+            if (isNaN(retryCount) || retryCount < 0) retryCount = 3;
+            var retryDelay = parseInt(getEl('reqRetryDelay').value) || 1;
+            var userAgent = getEl('reqUserAgent').value.trim();
+            var proxy = getEl('reqProxy').value.trim();
+            if (timeout < 10) { showToast('超时时间不能少于10秒'); return; }
+            var btn = getEl('saveReqConfigBtn');
+            btn.disabled = true;
+            btn.innerHTML = '保存中... <span class="refresh-indicator"></span>';
+
+            try {
+                var response = await fetch('/api/request-config/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: 'timeout=' + timeout + '&retry_count=' + retryCount + '&retry_delay=' + retryDelay + '&user_agent=' + encodeURIComponent(userAgent) + '&proxy=' + encodeURIComponent(proxy)
+                });
+                var data = await response.json();
+                if (data.success) { showToast(data.message); }
+                else { showToast(data.message); }
+            } catch (e) { showToast('保存失败: ' + e.message); }
+            finally { btn.disabled = false; btn.innerHTML = '保存请求配置'; }
+        }
+
+        async function rebuildCache() {
+            var btn = getEl('rebuildCacheBtn');
+            btn.disabled = true;
+            btn.innerHTML = '重建中... <span class="refresh-indicator"></span>';
+            try {
+                var resp = await fetch('/api/images/rebuild-cache', { method: 'POST' });
+                var data = await resp.json();
+                showToast(data.message);
+            } catch (e) { showToast('重建失败: ' + e.message); }
+            finally { btn.disabled = false; btn.innerHTML = '重建图片缓存'; }
+        }
+
+        window.onload = function() {
+            loadSources();
+            fetchScheduleStatus();
+            fetchRequestConfig();
+        };
+
+        window.onbeforeunload = function() {
+            Object.keys(refreshIntervals).forEach(function(k) {
+                if (refreshIntervals[k]) clearInterval(refreshIntervals[k]);
+            });
+        };
+    </script>
+</body>
+</html>
