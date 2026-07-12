@@ -1,7 +1,7 @@
 # ============================================================
 # Dockerfile — Vercel Container Registry 部署
 # ============================================================
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 COPY go.mod go.sum ./
@@ -10,13 +10,13 @@ COPY . .
 RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /server .
 
 # ============================================================
-FROM alpine:3.20
+FROM alpine:3.21
 
 RUN apk add --no-cache ca-certificates tzdata
 
 COPY --from=builder /server /server
 
-# 配置文件默认路径（可通过环境变量 CONFIG_PATH 覆盖）
+# 配置文件默认路径（可通过 CONFIG_PATH 环境变量覆盖）
 COPY config.json /app/config.json
 ENV CONFIG_PATH=/app/config.json
 
