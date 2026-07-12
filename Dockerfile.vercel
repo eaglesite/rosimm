@@ -1,20 +1,12 @@
-Running build in Washington, D.C., USA (East) – iad1
-Build machine configuration: 2 cores, 8 GB
-Cloning github.com/eaglesite/rosimm (Branch: main, Commit: 6ec7121)
-Previous build caches not available.
-Cloning completed: 365.000ms
-Running "vercel build"
-Vercel CLI 55.0.0
-▲ container  buildah: buildah version 1.42.2 (image-spec 1.1.1, runtime-spec 1.2.1) (storage-driver=storage.conf)
-▲ container  buildah storage: driver=overlay graphRoot=/vercel/.containers/storage runRoot=/run/containers/storage backingFs=xfs — verified
-  → Authenticating to vcr.vercel.com as team_GrYmgM6O4u8K4pMwooChiCtT
-  ✓ authenticated
-  → Ensuring registry repository "dockerfile"
-  ✓ created repository "dockerfile"
-▲ container  Building image vcr.vercel.com/eaglesites-projects/rosimm/dockerfile:6ec7121b042b (buildah)
-  → buildah build (linux/amd64)
-▲ container  layer store: cold (no cached images; first build or cache miss)
-[1/2] STEP 1/6: FROM golang:1.24-alpine AS builder
-Resolved "golang" as an alias (/etc/containers/registries.conf.d/000-shortnames.conf)
-Trying to pull docker.io/library/golang:1.24-alpine...
-Getting image source signatures
+FROM golang:1.24-alpine AS builder
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+ENV CGO_ENABLED=0 GOOS=linux GOARCH=amd64
+RUN go build -o /server main.go
+
+FROM alpine:3.20
+RUN apk --no-cache add ca-certificates
+COPY --from=builder /server /server
+CMD ["/server"]
